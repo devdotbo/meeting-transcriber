@@ -85,7 +85,7 @@ State writes to `AppPaths.dataDir`; IPC + queue snapshots to `ipcDir`.
 | File | Role |
 |------|------|
 | `MeetingTranscriberApp.swift` | `@main` UI shell — SwiftUI scenes, windows, NSOpenPanel, NSWorkspace. Observes `.showSettings` / `.closeSettings` / `.showSpeakerNaming` notifications for RPC- and pipeline-driven scene control |
-| `AppState.swift` | `@Observable @MainActor` ViewModel — business state, badge logic, pipeline wiring |
+| `AppState.swift` | `@Observable @MainActor` coordinator — composes concern-specific sub-controllers (`engines`, `watching`, `pipeline`, `permissions`, `channelHealth`, `liveTranscription`, `rpcServer`); exposes derived badge and status to the menu-bar scene |
 | `MenuBarView.swift` | Menu bar dropdown (state, actions, meeting info) |
 | `SettingsView.swift` | Settings window — `TabView` shell hosting six topic-grouped sub-views in `Sources/Settings/` |
 | `Settings/GeneralSettingsView.swift` | Apps to Watch · Detection (Poll Interval, Grace Period) · Updates |
@@ -103,6 +103,22 @@ State writes to `AppPaths.dataDir`; IPC + queue snapshots to `ipcDir`.
 | `LiveCaptionsState.swift` | `@Observable` live-captions state (per-channel hypotheses + finalised utterances) + RPC-wire types |
 | `LiveCaptionsOverlay.swift` | SwiftUI caption-bar content (recent finals + per-channel hypotheses) hosted in `LiveCaptionsWindow` |
 | `LiveCaptionsWindowController.swift` | Borderless click-through NSPanel hosting the caption overlay (⌥-drag to reposition; origin persisted) |
+
+### Concern Controllers
+
+Extracted from the former `AppState` god-class; each owns one concern and is held as a `let` sub-controller by `AppState`.
+
+| File | Role |
+|------|------|
+| `EngineController.swift` | Transcription-engine concern: three engine instances, active-engine selection, and settings → engine language/vocabulary sync. `AppState` exposes it as `engines`. Not `@Observable` — consumers observe the engine instances themselves. |
+| `PipelineController.swift` | Post-processing pipeline concern: `PipelineQueue` wiring, job-state notification callbacks, and file-enqueue entry points. `@Observable` — `queue` is read by the menu-bar UI and RPC snapshot. |
+| `WatchingController.swift` | Watching/recording lifecycle: the active `WatchLoop`, auto-detect toggle, manual recording start/stop, the recorder factory, and state-change handling. Holds sibling controller references (pipeline, channelHealth, permissions, liveTranscription) for cross-concern wiring. |
+| `ChannelHealthController.swift` | Per-channel and symmetric-silence detection: drives `micSilentActive` / `appSilentActive` / `recordingSilentActive` flags that control the menu-bar red-tint overlays. `@Observable`. |
+| `PermissionsController.swift` | TCC permission-health state: live-probes each permission, debounces repeated checks triggered by `NSApplication.didBecomeActiveNotification`, and drives the permission-badge overlay. `@Observable`. |
+| `RPCServerController.swift` | Debug RPC server lifecycle: launch-time enable gate, settings-driven start/stop, and security token rotation on re-enable. `#if !APPSTORE`. |
+| `LiveTranscriptionCoordinator.swift` | Live-transcription lifecycle: lazy `LiveTranscriptionController` creation, pre-warm + re-arm observer, and installing per-channel live sinks onto a recorder. Not `@Observable`. |
+| `SingleFlight.swift` | Generic single-flight coordinator: deduplicates concurrent async operations so the first caller kicks off the work and late arrivals await the same run. Shared by all three engine `loadModel()` implementations. |
+| `FileManager+OwnerOnly.swift` | `FileManager.restrictToOwner(_:)` extension: applies POSIX mode 0600 to sensitive files (voice embeddings, transcripts, protocol markdown, pipeline logs). |
 
 ### Core Pipeline
 

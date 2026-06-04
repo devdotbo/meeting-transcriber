@@ -8,8 +8,17 @@ app/MeetingTranscriber/    # Swift macOS menu bar app (SPM)
   Package.swift            # SPM manifest (WhisperKit + FluidAudio + AudioTapLib runtime deps; ViewInspector + SnapshotTesting test deps)
   Sources/
     MeetingTranscriberApp.swift  # @main, UI shell (scenes, NSOpenPanel, NSWorkspace)
-    AppState.swift         # @Observable @MainActor ViewModel (business state, badge logic, pipeline wiring)
+    AppState.swift         # @Observable @MainActor coordinator — composes concern controllers (engines, watching, pipeline, permissions, channelHealth, liveTranscription, rpcServer); exposes derived badge/status to the menu-bar scene
     AppState+RPC.swift     # RPC state snapshot helper for DebugRPCServer (#if !APPSTORE)
+    EngineController.swift # Transcription-engine concern controller: three engine instances, active-engine selection, settings→engine sync
+    PipelineController.swift # Post-processing pipeline concern controller: PipelineQueue wiring, job notifications, file-enqueue entry points
+    WatchingController.swift # Watching/recording lifecycle concern controller: WatchLoop, auto-detect toggle, manual recording, state-change handling
+    ChannelHealthController.swift # Per-channel + symmetric-silence detection controller: drives menu-bar red-tint indicators during recording
+    PermissionsController.swift # TCC permission-health concern controller: live-probing, debounced re-check, drives permission-badge overlay
+    RPCServerController.swift # Debug RPC server lifecycle controller: launch-time gate, settings-driven start/stop, token rotation (#if !APPSTORE)
+    LiveTranscriptionCoordinator.swift # Live-transcription lifecycle coordinator: lazy controller creation, pre-warm, re-arm observer, recorder sink install
+    SingleFlight.swift  # Single-flight coordinator: deduplicates concurrent async operations (shared by engine loadModel() calls)
+    FileManager+OwnerOnly.swift # Extension: restrictToOwner(_:) sets mode 0600 on sensitive files (embeddings, transcripts, logs)
     AudioConstants.swift   # Shared audio pipeline constants (target sample rate)
     MenuBarView.swift      # Menu bar dropdown UI
     MenuBarIcon.swift      # Animated waveform menu bar icon + BadgeKind.compute() pure function
