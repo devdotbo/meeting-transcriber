@@ -46,7 +46,8 @@ final class ParakeetTokenGroupingTests: XCTestCase {
     }
 
     func testGroupIntoSegmentsForcesSplitAt20TokenCap() {
-        // 25 tokens with no punctuation — must split at the 20-token cap.
+        // 25 complete-word tokens with no punctuation — should split at the
+        // 20-token target because every token ends at a safe word boundary.
         let timings = (0 ..< 25).map { i in
             timing("w\(i) ", start: Double(i), end: Double(i) + 1)
         }
@@ -58,6 +59,53 @@ final class ParakeetTokenGroupingTests: XCTestCase {
         XCTAssertFalse(segments[0].text.contains("w20"))
         // Second segment: w20..w24
         XCTAssertTrue(segments[1].text.contains("w24"))
+    }
+
+    func testGroupIntoSegmentsDoesNotSplitInsideWordAtTokenCap() {
+        var timings = (0 ..< 19).map { i in
+            timing("w\(i) ", start: Double(i), end: Double(i) + 1)
+        }
+        timings.append(timing("norm", start: 19, end: 20))
+        timings.append(timing("ally", start: 20, end: 21))
+        timings.append(timing(" next", start: 21, end: 22))
+
+        let segments = ParakeetTokenGrouping.groupIntoSegments(timings)
+
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertTrue(segments[0].text.contains("normally"))
+        XCTAssertFalse(segments[0].text.contains("norm ally"))
+        XCTAssertEqual(segments[1].text, "next")
+    }
+
+    func testGroupIntoSegmentsTreatsStandaloneWhitespaceTokenAsWordBoundaryAtCap() {
+        var timings = (0 ..< 19).map { i in
+            timing("w\(i) ", start: Double(i), end: Double(i) + 1)
+        }
+        timings.append(timing("word", start: 19, end: 20))
+        timings.append(timing(" ", start: 20, end: 20.1))
+        timings.append(timing("next", start: 20.1, end: 21))
+
+        let segments = ParakeetTokenGrouping.groupIntoSegments(timings)
+
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertTrue(segments[0].text.contains("word"))
+        XCTAssertEqual(segments[1].text, "next")
+    }
+
+    func testGroupIntoSegmentsSoftCapKeepsUnbrokenRunInOneSegment() {
+        // 25 non-blank tokens, no whitespace between them, no terminal
+        // punctuation. There is no safe split point, so the soft cap keeps
+        // them in a single segment even though it exceeds maxTokensPerSegment.
+        // Documents that the cap is a target, not a hard invariant — the old
+        // hard cap would have split this into two segments at the 20th token.
+        let timings = (0 ..< 25).map { i in
+            timing("x", start: Double(i), end: Double(i) + 1)
+        }
+
+        let segments = ParakeetTokenGrouping.groupIntoSegments(timings)
+
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments[0].text, String(repeating: "x", count: 25))
     }
 
     func testGroupIntoSegmentsSkipsBlankTokensInsideGroup() {
